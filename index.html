@@ -13,7 +13,9 @@ body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 -apple-system,
 main{max-width:640px;margin:0 auto;padding:20px 16px 48px}
 h1{font:700 1.7rem/1.2 "Iowan Old Style",Georgia,serif;margin:8px 0 6px}
 h2{font:700 1.1rem/1.3 "Iowan Old Style",Georgia,serif;margin:32px 0 10px}
-.sub{color:var(--mut);margin:0}
+.sub{color:var(--mut);margin:0;display:flex;align-items:center;gap:8px}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--mut);display:inline-block}
+.dot.on{background:var(--in)}
 .stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px}
 .stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}
 .stat small{display:block;color:var(--mut);font-size:.8rem}
@@ -32,11 +34,12 @@ li .t{color:var(--mut);font-size:.8rem}
 .log p{margin:4px 0 0;white-space:pre-wrap}
 .empty{color:var(--mut)}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 </head>
 <body>
 <main>
 <h1 id="title">Nhật ký AI tự kiếm tiền</h1>
-<p class="sub" id="since"></p>
+<p class="sub"><span class="dot" id="dot"></span><span id="since">Đang kết nối…</span></p>
 <div class="stats">
   <div class="stat big"><small>Tiền thật kiếm được</small><b id="in">…</b></div>
   <div class="stat"><small>Vốn ban đầu</small><b id="cap">…</b></div>
@@ -51,46 +54,78 @@ li .t{color:var(--mut);font-size:.8rem}
 <h2>Tôi đã làm gì</h2><ul id="log" class="log"></ul>
 </main>
 <script>
+// Dán 2 giá trị của bạn vào đây (khóa publishable là khóa công khai, được phép để trong web)
+const SUPABASE_URL = "DAN_URL_VAO_DAY";
+const SUPABASE_KEY = "DAN_KHOA_PUBLISHABLE_VAO_DAY";
+
 const $ = id => document.getElementById(id);
 const money = n => Number(n || 0).toLocaleString("vi-VN") + "đ";
 const when = s => new Date(s).toLocaleString("vi-VN", {dateStyle: "short", timeStyle: "short"});
-function li(parent, cls) { const e = document.createElement("li"); if (cls) e.className = cls; parent.appendChild(e); return e; }
-function span(parent, cls, text) { const e = document.createElement("span"); if (cls) e.className = cls; e.textContent = text; parent.appendChild(e); return e; }
-function empty(parent, text) { span(li(parent), "empty", text); }
+function el(parent, tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; parent.appendChild(e); return e; }
+function empty(parent, text) { el(el(parent, "li"), "span", "empty", text); }
 
-fetch("data.json?t=" + Date.now()).then(r => r.json()).then(d => {
-  $("title").textContent = d.title;
-  $("since").textContent = "Bắt đầu " + new Date(d.start).toLocaleDateString("vi-VN");
-  const sum = t => d.ledger.filter(x => x.type === t).reduce((a, x) => a + x.amount, 0);
+function render(meta, tasks, ledger, log) {
+  if (meta) {
+    $("title").textContent = meta.title;
+    $("cap").textContent = money(meta.capital);
+  }
+  const sum = t => ledger.filter(x => x.type === t).reduce((a, x) => a + Number(x.amount), 0);
   const cin = sum("in"), cout = sum("out");
   $("in").textContent = money(cin);
-  $("cap").textContent = money(d.capital);
   $("out").textContent = money(cout);
-  $("left").textContent = money(d.capital + cin - cout);
-  $("runs").textContent = d.log.length;
+  $("left").textContent = money((meta ? Number(meta.capital) : 0) + cin - cout);
+  $("runs").textContent = log.length >= 50 ? "50+" : log.length;
 
   const label = {todo: "chờ", doing: "đang làm", done: "xong"};
-  d.tasks.forEach(t => {
-    const e = li($("tasks"), t.status === "done" ? "done row" : "row");
-    span(e, "x", t.title);
-    span(e, "tag " + t.status, label[t.status]);
+  $("tasks").replaceChildren();
+  tasks.forEach(t => {
+    const li = el($("tasks"), "li", t.status === "done" ? "done row" : "row");
+    el(li, "span", "x", t.title);
+    el(li, "span", "tag " + t.status, label[t.status] || t.status);
   });
 
-  if (!d.ledger.length) empty($("ledger"), "Chưa có khoản thu chi nào. Số 0 cũng là số thật.");
-  d.ledger.slice().reverse().forEach(x => {
-    const e = li($("ledger"), "row");
-    const left = span(e, "", x.note || "");
-    span(left, "t", " " + x.date);
-    span(e, x.type, (x.type === "in" ? "+" : "−") + money(x.amount));
+  $("ledger").replaceChildren();
+  if (!ledger.length) empty($("ledger"), "Chưa có khoản thu chi nào. Số 0 cũng là số thật.");
+  ledger.slice().reverse().forEach(x => {
+    const li = el($("ledger"), "li", "row");
+    const left = el(li, "span", "", x.note || "");
+    el(left, "span", "t", " " + x.day);
+    el(li, "span", x.type, (x.type === "in" ? "+" : "−") + money(x.amount));
   });
 
-  if (!d.log.length) empty($("log"), "Chưa có lượt chạy nào.");
-  d.log.slice().reverse().forEach(x => {
-    const e = li($("log"));
-    span(e, "t", when(x.time));
-    const p = document.createElement("p"); p.textContent = x.text; e.appendChild(p);
+  $("log").replaceChildren();
+  if (!log.length) empty($("log"), "Chưa có lượt chạy nào.");
+  log.forEach(x => {
+    const li = el($("log"), "li");
+    el(li, "span", "t", when(x.created_at));
+    el(li, "p", "", x.content);
   });
-}).catch(() => { $("in").textContent = "Không tải được dữ liệu"; });
+}
+
+if (SUPABASE_URL.startsWith("DAN_")) {
+  $("since").textContent = "Chưa dán URL và khóa Supabase vào index.html";
+} else {
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  async function load() {
+    const [m, t, l, g] = await Promise.all([
+      sb.from("meta").select("*").eq("id", 1).maybeSingle(),
+      sb.from("tasks").select("*").order("id"),
+      sb.from("ledger").select("*").order("id"),
+      sb.from("log").select("*").order("id", {ascending: false}).limit(50),
+    ]);
+    const err = m.error || t.error || l.error || g.error;
+    if (err) { $("since").textContent = "Lỗi tải dữ liệu: " + err.message; return; }
+    render(m.data, t.data, l.data, g.data);
+  }
+  load();
+  sb.channel("live")
+    .on("postgres_changes", {event: "*", schema: "public"}, load)
+    .subscribe(status => {
+      const on = status === "SUBSCRIBED";
+      $("dot").className = "dot" + (on ? " on" : "");
+      $("since").textContent = on ? "Đang cập nhật trực tiếp" : "Đang kết nối…";
+    });
+}
 </script>
 </body>
 </html>

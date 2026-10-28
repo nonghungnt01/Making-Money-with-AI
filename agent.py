@@ -1,12 +1,21 @@
-import json, os, sys, urllib.request, datetime
+import json, os, sys, urllib.request, urllib.error
 
+URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
+SKEY = os.environ.get("SUPABASE_SECRET_KEY", "")
+GKEY = os.environ.get("GEMINI_API_KEY", "")
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.1-flash-lite")
-KEY = os.environ.get("GEMINI_API_KEY", "")
-PATH = "data.json"
 
 
-def now():
-    return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="minutes")
+def db(method, path, body=None):
+    req = urllib.request.Request(
+        f"{URL}/rest/v1/{path}",
+        method=method,
+        data=None if body is None else json.dumps(body).encode(),
+        headers={"apikey": SKEY, "Content-Type": "application/json", "Prefer": "return=minimal"},
+    )
+    with urllib.request.urlopen(req, timeout=30) as r:
+        raw = r.read()
+    return json.loads(raw) if raw else None
 
 
 def ask(state):
@@ -27,53 +36,62 @@ def ask(state):
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {"responseMimeType": "application/json", "temperature": 0.7},
     }
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
     req = urllib.request.Request(
-        url,
+        f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent",
         data=json.dumps(body).encode(),
-        headers={"Content-Type": "application/json", "x-goog-api-key": KEY},
+        headers={"Content-Type": "application/json", "x-goog-api-key": GKEY},
     )
     with urllib.request.urlopen(req, timeout=90) as r:
         res = json.load(r)
     return json.loads(res["candidates"][0]["content"]["parts"][0]["text"])
 
 
-def main():
-    if not KEY:
-        sys.exit("Thiếu GEMINI_API_KEY")
-    with open(PATH, encoding="utf-8") as f:
-        data = json.load(f)
+def to_ids(values):
+    out = []
+    for v in values or []:
+        try:
+            out.append(int(v))
+        except (TypeError, ValueError):
+            pass
+    return out
 
-    # Agent chỉ thấy tình hình, không được sửa ledger/capital.
-    view = {k: data[k] for k in ("capital", "ledger", "tasks")}
-    view["log"] = data["log"][-5:]
+
+def main():
+    if not (URL and SKEY and GKEY):
+        sys.exit("Thiếu SUPABASE_URL, SUPABASE_SECRET_KEY hoặc GEMINI_API_KEY")
+
+    meta = db("GET", "meta?select=*&id=eq.1")[0]
+    tasks = db("GET", "tasks?select=*&order=id")
+    ledger = db("GET", "ledger?select=*&order=id")
+    recent = db("GET", "log?select=created_at,content&order=id.desc&limit=5")
+    state = {"capital": meta["capital"], "ledger": ledger, "tasks": tasks, "log": recent[::-1]}
 
     try:
-        out = ask(view)
+        out = ask(state)
         text = str(out.get("entry", "")).strip()[:1200] or "Lượt này tôi không có gì để ghi."
-        ids = {t["id"] for t in data["tasks"]}
-        for t in data["tasks"]:
-            if t["status"] == "doing":
-                t["status"] = "todo"
-            if t["id"] == out.get("doing_id") and t["status"] != "done":
-                t["status"] = "doing"
-            if t["id"] in (out.get("done_ids") or []):
-                t["status"] = "done"
-        open_count = sum(1 for t in data["tasks"] if t["status"] != "done")
-        nid = max(ids, default=0)
-        for title in (out.get("new_tasks") or [])[:2]:
-            if open_count >= 10:
-                break
-            nid += 1
-            open_count += 1
-            data["tasks"].append({"id": nid, "title": str(title)[:140], "status": "todo"})
+        valid = {t["id"] for t in tasks}
+        doing = to_ids([out.get("doing_id")])
+        done = [i for i in to_ids(out.get("done_ids")) if i in valid]
+        db("PATCH", "tasks?status=eq.doing", {"status": "todo"})
+        if done:
+            db("PATCH", f"tasks?id=in.({','.join(map(str, done))})", {"status": "done"})
+        if doing and doing[0] in valid and doing[0] not in done:
+            db("PATCH", f"tasks?id=eq.{doing[0]}", {"status": "doing"})
+        open_count = sum(1 for t in tasks if t["status"] != "done" and t["id"] not in done)
+        news = [str(t)[:140] for t in (out.get("new_tasks") or [])[:2]]
+        news = news[: max(0, 10 - open_count)]
+        if news:
+            db("POST", "tasks", [{"title": t} for t in news])
     except Exception as e:
-        text = f"Lượt này bị lỗi, chưa làm được gì: {str(e)[:150]}"
+        detail = ""
+        if isinstance(e, urllib.error.HTTPError):
+            try:
+                detail = e.read().decode()[:250]
+            except Exception:
+                pass
+        text = f"Lượt này bị lỗi, chưa làm được gì: {e} {detail}"[:600]
 
-    data["log"].append({"time": now(), "text": text})
-    data["log"] = data["log"][-100:]
-    with open(PATH, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    db("POST", "log", {"content": text})
 
 
 main()
