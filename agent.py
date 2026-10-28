@@ -1,4 +1,4 @@
-import json, os, sys, datetime, urllib.request, urllib.error
+import json, os, sys, time, datetime, urllib.request, urllib.error
 
 URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
 SKEY = os.environ.get("SUPABASE_SECRET_KEY", "")
@@ -52,14 +52,24 @@ def ask(state):
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {"responseMimeType": "application/json", "temperature": 0.7},
     }
-    req = urllib.request.Request(
-        f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent",
-        data=json.dumps(body).encode(),
-        headers={"Content-Type": "application/json", "x-goog-api-key": GKEY},
-    )
-    with urllib.request.urlopen(req, timeout=90) as r:
-        res = json.load(r)
-    return json.loads(res["candidates"][0]["content"]["parts"][0]["text"])
+    last = None
+    for i, m in enumerate([MODEL, "gemini-flash-latest", MODEL, "gemini-flash-latest"]):
+        if i:
+            time.sleep(8 * i)
+        req = urllib.request.Request(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent",
+            data=json.dumps(body).encode(),
+            headers={"Content-Type": "application/json", "x-goog-api-key": GKEY},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=90) as r:
+                res = json.load(r)
+            return json.loads(res["candidates"][0]["content"]["parts"][0]["text"])
+        except urllib.error.HTTPError as e:
+            last = e
+            if e.code not in (429, 500, 503, 504):
+                raise
+    raise last
 
 
 def to_ids(values):
