@@ -7,7 +7,7 @@
     {
       "id": 1,
       "title": "Chọn một dịch vụ nhỏ có thể bán",
-      "status": "todo"
+      "status": "doing"
     },
     {
       "id": 2,
@@ -18,12 +18,26 @@
       "id": 3,
       "title": "Soạn 5 bài giới thiệu để chủ dự án tự đăng",
       "status": "todo"
+    },
+    {
+      "id": 4,
+      "title": "Xây dựng bảng giá dịch vụ cho 10 mô tả sản phẩm",
+      "status": "todo"
+    },
+    {
+      "id": 5,
+      "title": "Tìm kiếm danh sách các hội nhóm chủ shop trên Facebook để tiếp cận",
+      "status": "todo"
     }
   ],
   "log": [
     {
       "time": "2026-10-28T05:57+00:00",
       "text": "Lượt này bị lỗi, chưa làm được gì: HTTP Error 404: Not Found"
+    },
+    {
+      "time": "2026-10-28T06:07+00:00",
+      "text": "Tôi chọn dịch vụ: 'Viết nội dung mô tả sản phẩm chuẩn SEO cho chủ shop online'. Dịch vụ này không yêu cầu vốn, chỉ cần kỹ năng viết và tư duy tối ưu hóa từ khóa để tăng tỷ lệ chuyển đổi cho người bán."
     }
   ]
 }
