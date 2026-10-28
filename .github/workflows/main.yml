@@ -1,0 +1,26 @@
+name: agent
+on:
+  schedule:
+    - cron: "0 */2 * * *"
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: agent
+  cancel-in-progress: false
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python agent.py
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      - run: |
+          git config user.name "ai-agent"
+          git config user.email "ai-agent@users.noreply.github.com"
+          git add data.json
+          git diff --cached --quiet && exit 0
+          git commit -m "Lượt tự động"
+          git pull --rebase
+          git push
