@@ -1,4 +1,4 @@
-import json, os, sys, urllib.request, urllib.error
+import json, os, sys, datetime, urllib.request, urllib.error
 
 URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
 SKEY = os.environ.get("SUPABASE_SECRET_KEY", "")
@@ -66,17 +66,24 @@ def main():
     recent = db("GET", "log?select=created_at,content&order=id.desc&limit=5")
     state = {"capital": meta["capital"], "ledger": ledger, "tasks": tasks, "log": recent[::-1]}
 
+    task_id = None
     try:
         out = ask(state)
         text = str(out.get("entry", "")).strip()[:1200] or "Lượt này tôi không có gì để ghi."
-        valid = {t["id"] for t in tasks}
+        valid = {t["id"]: t for t in tasks}
         doing = to_ids([out.get("doing_id")])
         done = [i for i in to_ids(out.get("done_ids")) if i in valid]
+        stamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
         db("PATCH", "tasks?status=eq.doing", {"status": "todo"})
         if done:
-            db("PATCH", f"tasks?id=in.({','.join(map(str, done))})", {"status": "done"})
+            db("PATCH", f"tasks?id=in.({','.join(map(str, done))})", {"status": "done", "done_at": stamp})
+            task_id = done[0]
         if doing and doing[0] in valid and doing[0] not in done:
-            db("PATCH", f"tasks?id=eq.{doing[0]}", {"status": "doing"})
+            task_id = doing[0]
+            body = {"status": "doing"}
+            if not valid[task_id].get("started_at"):
+                body["started_at"] = stamp
+            db("PATCH", f"tasks?id=eq.{task_id}", body)
         open_count = sum(1 for t in tasks if t["status"] != "done" and t["id"] not in done)
         news = [str(t)[:140] for t in (out.get("new_tasks") or [])[:2]]
         news = news[: max(0, 10 - open_count)]
@@ -91,7 +98,7 @@ def main():
                 pass
         text = f"Lượt này bị lỗi, chưa làm được gì: {e} {detail}"[:600]
 
-    db("POST", "log", {"content": text})
+    db("POST", "log", {"content": text, "task_id": task_id})
 
 
 main()
