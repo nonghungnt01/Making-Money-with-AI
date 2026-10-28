@@ -10,8 +10,6 @@ NKEY = os.environ.get("NVIDIA_API_KEY", "")
 NMODEL = os.environ.get("NVIDIA_MODEL", "nvidia/nemotron-3.5-super-vl-120b-a12b")
 
 
-
-
 def db(method, path, body=None, ret=False):
     req = urllib.request.Request(
         f"{URL}/rest/v1/{path}",
@@ -34,42 +32,8 @@ def tg(method, payload):
         return json.load(r)
 
 
-def ask(state):
-    prompt = (
-        "Bạn là một AI agent trong dự án nhật ký công khai: bắt đầu với số vốn "
-        f"{state['capital']}đ và phải tự tìm cách kiếm tiền một cách hợp pháp.\n"
-        "Quy tắc:\n"
-        "- Bạn KHÔNG có quyền ghi thu chi và KHÔNG được bịa số liệu. Tiền chỉ do chủ dự án ghi.\n"
-        "- Bạn chỉ làm được việc bằng chữ: lập kế hoạch, soạn nội dung, nghiên cứu ý tưởng. "
-        "Không tự đăng bài, không spam, không giả mạo.\n"
-        "- Mỗi lượt chọn đúng 1 việc đang làm, làm một phần thật (viết ra kết quả cụ thể trong entry).\n"
-        "- Nội dung đầy đủ (bài đăng, trang giới thiệu, tin nhắn) đưa vào \"draft\" để chủ dự án duyệt trước khi dùng; "
-        "\"entry\" chỉ tóm tắt.\n"
-        "- Xem mục drafts trong trạng thái: bản bị rejected nghĩa là chủ dự án không thích, đừng lặp lại.\n"
-        "- Viết trung thực, ngắn gọn, tiếng Việt, tối đa 120 từ.\n\n"
-        f"Trạng thái hiện tại:\n{json.dumps(state, ensure_ascii=False)}\n\n"
-        'Trả về JSON đúng dạng: {"entry": "...", "doing_id": số hoặc null, '
-        '"done_ids": [số], "new_tasks": ["tối đa 2 việc mới"], '
-        '"draft": null hoặc {"kind": "bai_dang|trang_gioi_thieu|tin_nhan", "title": "...", "body": "..."}}'
-    )
-    body = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"responseMimeType": "application/json", "temperature": 0.7},
-    }
-        try:
-        return ask_gemini(prompt)
-    except Exception as e:
-        if not NKEY:
-            raise
-        print("Gemini lỗi, chuyển sang NVIDIA:", e)
-        return ask_nvidia(prompt)
-
-
 def parse_json(text):
     text = text.strip()
-    if text.startswith("```"):
-        text = text.strip("`")
-        text = text[4:] if text.startswith("json") else text
     s, e = text.find("{"), text.rfind("}")
     return json.loads(text[s:e + 1])
 
@@ -115,6 +79,34 @@ def ask_nvidia(prompt):
     with urllib.request.urlopen(req, timeout=120) as r:
         res = json.load(r)
     return parse_json(res["choices"][0]["message"]["content"])
+
+
+def ask(state):
+    prompt = (
+        "Bạn là một AI agent trong dự án nhật ký công khai: bắt đầu với số vốn "
+        f"{state['capital']}đ và phải tự tìm cách kiếm tiền một cách hợp pháp.\n"
+        "Quy tắc:\n"
+        "- Bạn KHÔNG có quyền ghi thu chi và KHÔNG được bịa số liệu. Tiền chỉ do chủ dự án ghi.\n"
+        "- Bạn chỉ làm được việc bằng chữ: lập kế hoạch, soạn nội dung, nghiên cứu ý tưởng. "
+        "Không tự đăng bài, không spam, không giả mạo.\n"
+        "- Mỗi lượt chọn đúng 1 việc đang làm, làm một phần thật (viết ra kết quả cụ thể trong entry).\n"
+        "- Nội dung đầy đủ (bài đăng, trang giới thiệu, tin nhắn) đưa vào \"draft\" để chủ dự án duyệt trước khi dùng; "
+        "\"entry\" chỉ tóm tắt.\n"
+        "- Xem mục drafts trong trạng thái: bản bị rejected nghĩa là chủ dự án không thích, đừng lặp lại.\n"
+        "- Viết trung thực, ngắn gọn, tiếng Việt, tối đa 120 từ.\n\n"
+        f"Trạng thái hiện tại:\n{json.dumps(state, ensure_ascii=False)}\n\n"
+        'Trả về JSON đúng dạng: {"entry": "...", "doing_id": số hoặc null, '
+        '"done_ids": [số], "new_tasks": ["tối đa 2 việc mới"], '
+        '"draft": null hoặc {"kind": "bai_dang|trang_gioi_thieu|tin_nhan", "title": "...", "body": "..."}}'
+    )
+    try:
+        return ask_gemini(prompt)
+    except Exception as e:
+        if not NKEY:
+            raise
+        print("Gemini lỗi, chuyển sang NVIDIA:", e)
+        return ask_nvidia(prompt)
+
 
 def to_ids(values):
     out = []
