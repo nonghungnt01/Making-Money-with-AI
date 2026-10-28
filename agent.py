@@ -6,6 +6,10 @@ GKEY = os.environ.get("GEMINI_API_KEY", "")
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.1-flash-lite")
 TG = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 CHAT = os.environ.get("TELEGRAM_CHAT_ID", "")
+NKEY = os.environ.get("NVIDIA_API_KEY", "")
+NMODEL = os.environ.get("NVIDIA_MODEL", "nvidia/nemotron-3.5-super-vl-120b-a12b")
+
+
 
 
 def db(method, path, body=None, ret=False):
@@ -52,25 +56,65 @@ def ask(state):
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {"responseMimeType": "application/json", "temperature": 0.7},
     }
+        try:
+        return ask_gemini(prompt)
+    except Exception as e:
+        if not NKEY:
+            raise
+        print("Gemini lỗi, chuyển sang NVIDIA:", e)
+        return ask_nvidia(prompt)
+
+
+def parse_json(text):
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.strip("`")
+        text = text[4:] if text.startswith("json") else text
+    s, e = text.find("{"), text.rfind("}")
+    return json.loads(text[s:e + 1])
+
+
+def ask_gemini(prompt):
+    body = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"responseMimeType": "application/json", "temperature": 0.7},
+    }
     last = None
-    for i, m in enumerate([MODEL, "gemini-flash-latest", MODEL, "gemini-flash-latest"]):
+    for i, m in enumerate([MODEL, "gemini-flash-latest"]):
         if i:
-            time.sleep(8 * i)
+            time.sleep(8)
         req = urllib.request.Request(
             f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent",
             data=json.dumps(body).encode(),
             headers={"Content-Type": "application/json", "x-goog-api-key": GKEY},
         )
         try:
-            with urllib.request.urlopen(req, timeout=90) as r:
+            with urllib.request.urlopen(req, timeout=60) as r:
                 res = json.load(r)
-            return json.loads(res["candidates"][0]["content"]["parts"][0]["text"])
-        except urllib.error.HTTPError as e:
+            return parse_json(res["candidates"][0]["content"]["parts"][0]["text"])
+        except Exception as e:
             last = e
-            if e.code not in (429, 500, 503, 504):
-                raise
     raise last
 
+
+def ask_nvidia(prompt):
+    body = {
+        "model": NMODEL,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.7,
+        "top_p": 0.95,
+        "max_tokens": 4096,
+        "chat_template_kwargs": {"enable_thinking": False},
+        "stream": False,
+    }
+    req = urllib.request.Request(
+        "https://integrate.api.nvidia.com/v1/chat/completions",
+        data=json.dumps(body).encode(),
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {NKEY}"},
+    )
+    with urllib.request.urlopen(req, timeout=120) as r:
+        res = json.load(r)
+    return parse_json(res["choices"][0]["message"]["content"])
 
 def to_ids(values):
     out = []
