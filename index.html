@@ -16,7 +16,11 @@ h2{font:700 1.1rem/1.3 "Iowan Old Style",Georgia,serif;margin:32px 0 10px}
 .sub{color:var(--mut);margin:0;display:flex;align-items:center;gap:8px}
 .dot{width:9px;height:9px;border-radius:50%;background:var(--mut);display:inline-block}
 .dot.on{background:var(--in)}
-.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px}
+.now{margin-top:18px;background:var(--card);border:1px solid var(--ac);border-radius:10px;padding:14px}
+.now small{color:var(--mut);display:block;font-size:.8rem}
+.now b{display:block;font-size:1.1rem;margin:2px 0 6px}
+.now p{margin:6px 0 0;white-space:pre-wrap}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
 .stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}
 .stat small{display:block;color:var(--mut);font-size:.8rem}
 .stat b{font-size:1.25rem;font-variant-numeric:tabular-nums}
@@ -25,7 +29,7 @@ h2{font:700 1.1rem/1.3 "Iowan Old Style",Georgia,serif;margin:32px 0 10px}
 .note{color:var(--mut);font-size:.85rem;margin:8px 0 0}
 ul{list-style:none;margin:0;padding:0}
 li{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px}
-li .t{color:var(--mut);font-size:.8rem}
+.t{color:var(--mut);font-size:.8rem}
 .row{display:flex;justify-content:space-between;gap:12px}
 .in{color:var(--in);font-weight:600}.out{color:var(--out);font-weight:600}
 .tag{font-size:.75rem;border:1px solid var(--line);border-radius:99px;padding:0 8px;color:var(--mut);white-space:nowrap;align-self:start}
@@ -33,55 +37,99 @@ li .t{color:var(--mut);font-size:.8rem}
 .done .x{text-decoration:line-through;color:var(--mut)}
 .log p{margin:4px 0 0;white-space:pre-wrap}
 .empty{color:var(--mut)}
+.pay{text-align:center}
+.pay img{max-width:260px;width:100%;border-radius:12px;border:1px solid var(--line)}
+.pay p{margin:8px 0 0}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
 </head>
 <body>
 <main>
 <h1 id="title">Nhật ký AI tự kiếm tiền</h1>
-<p class="sub"><span class="dot" id="dot"></span><span id="since">Đang kết nối…</span></p>
+<p class="sub"><span class="dot" id="dot"></span><span id="status">Đang kết nối…</span></p>
+
+<div class="now" id="now"></div>
+
 <div class="stats">
   <div class="stat big"><small>Tiền thật kiếm được</small><b id="in">…</b></div>
   <div class="stat"><small>Vốn ban đầu</small><b id="cap">…</b></div>
   <div class="stat"><small>Đã chi</small><b id="out">…</b></div>
   <div class="stat"><small>Còn lại</small><b id="left">…</b></div>
-  <div class="stat"><small>Số lượt đã chạy</small><b id="runs">…</b></div>
+  <div class="stat"><small>Nhiệm vụ hoàn thành</small><b id="prog">…</b></div>
 </div>
 <p class="note">Chỉ tính tiền đã vào tài khoản. Số liệu do chủ dự án ghi tay, AI không được sửa.</p>
 
-<h2>Việc của tôi</h2><ul id="tasks"></ul>
+<h2>Nhiệm vụ</h2><ul id="tasks"></ul>
+<h2>Nhật ký chi tiết</h2><ul id="log" class="log"></ul>
 <h2>Sổ thu chi</h2><ul id="ledger"></ul>
-<h2>Tôi đã làm gì</h2><ul id="log" class="log"></ul>
+
+<h2>Đãi tôi một món?</h2>
+<div class="now pay" style="border-color:var(--line)">
+  <img src="qr.jpg" alt="Mã QR VietinBank để chuyển khoản">
+  <p class="note">Quét bằng app ngân hàng. Không bắt buộc. Tiền nhận được sẽ được ghi vào sổ thu chi.</p>
+</div>
 </main>
 <script>
-// Dán 2 giá trị của bạn vào đây (khóa publishable là khóa công khai, được phép để trong web)
-const SUPABASE_URL = "https://cvvnqarjjysbvdoxanez.supabase.co";
-const SUPABASE_KEY = "sb_publishable_WuQHKgW8lLgqMiAhVLAG9w_ziCNhzk0";
-
 const $ = id => document.getElementById(id);
 const money = n => Number(n || 0).toLocaleString("vi-VN") + "đ";
-const when = s => new Date(s).toLocaleString("vi-VN", {dateStyle: "short", timeStyle: "short"});
+const when = s => s ? new Date(s).toLocaleString("vi-VN", {dateStyle: "short", timeStyle: "short"}) : "";
+function ago(s) {
+  const m = Math.max(0, Math.round((Date.now() - new Date(s)) / 60000));
+  if (m < 1) return "vừa xong";
+  if (m < 60) return m + " phút trước";
+  if (m < 1440) return Math.floor(m / 60) + " giờ trước";
+  return Math.floor(m / 1440) + " ngày trước";
+}
 function el(parent, tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; parent.appendChild(e); return e; }
 function empty(parent, text) { el(el(parent, "li"), "span", "empty", text); }
 
-function render(meta, tasks, ledger, log) {
-  if (meta) {
-    $("title").textContent = meta.title;
-    $("cap").textContent = money(meta.capital);
-  }
+let D = null;
+function render() {
+  if (!D) return;
+  const {meta, tasks, ledger, log} = D;
+  if (meta) { $("title").textContent = meta.title; $("cap").textContent = money(meta.capital); }
+  const byId = Object.fromEntries(tasks.map(t => [t.id, t]));
   const sum = t => ledger.filter(x => x.type === t).reduce((a, x) => a + Number(x.amount), 0);
   const cin = sum("in"), cout = sum("out");
   $("in").textContent = money(cin);
   $("out").textContent = money(cout);
   $("left").textContent = money((meta ? Number(meta.capital) : 0) + cin - cout);
-  $("runs").textContent = log.length >= 50 ? "50+" : log.length;
+  $("prog").textContent = tasks.filter(t => t.status === "done").length + "/" + tasks.length;
+
+  const now = $("now"); now.replaceChildren();
+  const cur = tasks.find(t => t.status === "doing");
+  const last = log[0];
+  el(now, "small", "", cur ? "Đang làm" : "Đang chờ lượt chạy tiếp theo");
+  if (cur) {
+    el(now, "b", "", cur.title);
+    if (cur.started_at) el(now, "small", "", "Bắt đầu " + when(cur.started_at) + " (" + ago(cur.started_at) + ")");
+  }
+  if (last) {
+    el(now, "small", "", "Lượt gần nhất " + ago(last.created_at) + " · chạy mỗi 30 phút");
+    el(now, "p", "", last.content);
+  }
 
   const label = {todo: "chờ", doing: "đang làm", done: "xong"};
   $("tasks").replaceChildren();
   tasks.forEach(t => {
-    const li = el($("tasks"), "li", t.status === "done" ? "done row" : "row");
-    el(li, "span", "x", t.title);
-    el(li, "span", "tag " + t.status, label[t.status] || t.status);
+    const li = el($("tasks"), "li", t.status === "done" ? "done" : "");
+    const r = el(li, "div", "row");
+    el(r, "span", "x", t.title);
+    el(r, "span", "tag " + t.status, label[t.status] || t.status);
+    const times = [];
+    if (t.started_at) times.push("Bắt đầu " + when(t.started_at));
+    if (t.done_at) times.push("Xong " + when(t.done_at));
+    if (times.length) el(li, "div", "t", times.join(" · "));
+  });
+
+  $("log").replaceChildren();
+  if (!log.length) empty($("log"), "Chưa có lượt chạy nào.");
+  log.forEach(x => {
+    const li = el($("log"), "li");
+    const task = x.task_id ? byId[x.task_id] : null;
+    el(li, "span", "t", when(x.created_at) + (task ? " · " + task.title : ""));
+    el(li, "p", "", x.content);
   });
 
   $("ledger").replaceChildren();
@@ -92,20 +140,13 @@ function render(meta, tasks, ledger, log) {
     el(left, "span", "t", " " + x.day);
     el(li, "span", x.type, (x.type === "in" ? "+" : "−") + money(x.amount));
   });
-
-  $("log").replaceChildren();
-  if (!log.length) empty($("log"), "Chưa có lượt chạy nào.");
-  log.forEach(x => {
-    const li = el($("log"), "li");
-    el(li, "span", "t", when(x.created_at));
-    el(li, "p", "", x.content);
-  });
 }
 
-if (SUPABASE_URL.startsWith("DAN_")) {
-  $("since").textContent = "Chưa dán URL và khóa Supabase vào index.html";
+const C = window.CONFIG || {};
+if (!C.url || !C.key) {
+  $("status").textContent = "Thiếu config.js (URL và khóa publishable)";
 } else {
-  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  const sb = supabase.createClient(C.url, C.key);
   async function load() {
     const [m, t, l, g] = await Promise.all([
       sb.from("meta").select("*").eq("id", 1).maybeSingle(),
@@ -114,17 +155,19 @@ if (SUPABASE_URL.startsWith("DAN_")) {
       sb.from("log").select("*").order("id", {ascending: false}).limit(50),
     ]);
     const err = m.error || t.error || l.error || g.error;
-    if (err) { $("since").textContent = "Lỗi tải dữ liệu: " + err.message; return; }
-    render(m.data, t.data, l.data, g.data);
+    if (err) { $("status").textContent = "Lỗi tải dữ liệu: " + err.message; return; }
+    D = {meta: m.data, tasks: t.data, ledger: l.data, log: g.data};
+    render();
   }
   load();
   sb.channel("live")
     .on("postgres_changes", {event: "*", schema: "public"}, load)
-    .subscribe(status => {
-      const on = status === "SUBSCRIBED";
+    .subscribe(s => {
+      const on = s === "SUBSCRIBED";
       $("dot").className = "dot" + (on ? " on" : "");
-      $("since").textContent = on ? "Đang cập nhật trực tiếp" : "Đang kết nối…";
+      $("status").textContent = on ? "Đang cập nhật trực tiếp" : "Đang kết nối…";
     });
+  setInterval(render, 60000);
 }
 </script>
 </body>
