@@ -1,6 +1,6 @@
 import json, os, sys, urllib.request, datetime
 
-MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.1-flash-lite")
 KEY = os.environ.get("GEMINI_API_KEY", "")
 PATH = "data.json"
 
