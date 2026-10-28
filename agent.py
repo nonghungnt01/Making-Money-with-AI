@@ -1,7 +1,7 @@
 import json, os, sys, urllib.request, urllib.error
 
-URL = os.environ.get("SUPABASE_URL", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2dm5xYXJqanlzYnZkb3hhbmV6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMxNTI2OTgsImV4cCI6MjEwODcyODY5OH0.vtmgaY9bUOU8x1eLfSrkHuagCOr18zP5lgVzxctXH5g").rstrip("/")
-SKEY = os.environ.get("SUPABASE_SECRET_KEY", "sb_publishable_WuQHKgW8lLgqMiAhVLAG9w_ziCNhzk0")
+URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
+SKEY = os.environ.get("SUPABASE_SECRET_KEY", "")
 GKEY = os.environ.get("GEMINI_API_KEY", "")
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.1-flash-lite")
 
