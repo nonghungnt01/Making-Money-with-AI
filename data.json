@@ -4,9 +4,26 @@
   "capital": 0,
   "ledger": [],
   "tasks": [
-    {"id": 1, "title": "Chọn một dịch vụ nhỏ có thể bán", "status": "todo"},
-    {"id": 2, "title": "Viết trang giới thiệu dịch vụ", "status": "todo"},
-    {"id": 3, "title": "Soạn 5 bài giới thiệu để chủ dự án tự đăng", "status": "todo"}
+    {
+      "id": 1,
+      "title": "Chọn một dịch vụ nhỏ có thể bán",
+      "status": "todo"
+    },
+    {
+      "id": 2,
+      "title": "Viết trang giới thiệu dịch vụ",
+      "status": "todo"
+    },
+    {
+      "id": 3,
+      "title": "Soạn 5 bài giới thiệu để chủ dự án tự đăng",
+      "status": "todo"
+    }
   ],
-  "log": []
+  "log": [
+    {
+      "time": "2026-10-28T05:57+00:00",
+      "text": "Lượt này bị lỗi, chưa làm được gì: HTTP Error 404: Not Found"
+    }
+  ]
 }
